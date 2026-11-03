@@ -1110,7 +1110,48 @@ const JSONBIN_API_KEY = "$2a$10$0llfY7SG05099EFOae6g6.c5tGU.Q4Nz68u1aKJFcM6Ni47l
 const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 const jsonbinConfigured = () => JSONBIN_BIN_ID !== "YOUR_JSONBIN_BIN_ID" && JSONBIN_API_KEY !== "YOUR_JSONBIN_API_KEY";
 
+// ===================================================================
+// GOOGLE SHEETS BACKEND — paste the Apps Script web-app URL here
+// (Deploy → Web app → URL ending in /exec). Leave "" to keep using JSONBin.
+// ===================================================================
+const SHEETS_URL = "";
+const useSheets = () => /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(SHEETS_URL);
+const backendConfigured = () => useSheets() || jsonbinConfigured();
+function normalizeRecord(record){
+  if(Array.isArray(record)) return { teams: record.map(migrateTeam), staff: [], vehicles: [] };
+  record = record || {};
+  return { teams: (record.teams||[]).map(migrateTeam), staff: record.staff||[], vehicles: record.vehicles||[] };
+}
+async function sheetsSave(data){
+  // text/plain avoids a CORS preflight, which Apps Script cannot answer
+  const res = await fetch(SHEETS_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ app: "czero-ops", action: "save", data }) });
+  const out = await res.json().catch(() => ({}));
+  if(!res.ok || !out.ok) throw new Error("Sheets save failed: " + (out.error || res.status));
+}
+let sheetsImportTried = false;
 async function fetchDataOnce(){
+  if(!useSheets()) return fetchJsonbinOnce();
+  const res = await fetch(`${SHEETS_URL}?action=read&t=${Date.now()}`, { cache: "no-store" });
+  if(!res.ok) throw new Error("Sheets fetch failed: " + res.status);
+  const out = await res.json();
+  if(!out.ok) throw new Error("Sheets fetch failed");
+  const d = normalizeRecord(out.record);
+  // first run on an empty sheet: copy the existing data across from JSONBin once
+  if(!d.teams.length && !d.staff.length && !sheetsImportTried && jsonbinConfigured()){
+    sheetsImportTried = true;
+    try{
+      const old = await fetchJsonbinOnce();
+      if(old.teams.length || old.staff.length){
+        await sheetsSave({ teams: old.teams, staff: old.staff, vehicles: old.vehicles || [] });
+        console.info("Imported", old.teams.length, "teams from JSONBin into Google Sheets");
+        return old;
+      }
+    }catch(e){ console.warn("JSONBin → Sheets import skipped", e); }
+  }
+  return d;
+}
+async function fetchJsonbinOnce(){
   // cache:"no-store" + a cache-busting query param — force the browser to
   // always hit the network fresh, never serve a stale cached GET response.
   const res = await fetch(`${JSONBIN_URL}/latest?t=${Date.now()}`, {
@@ -1122,15 +1163,12 @@ async function fetchDataOnce(){
   const record = data.record;
   // Backward-compatible: older data was saved as a plain array of teams.
   // Newer data is {teams:[...], staff:[...]}.
-  if(Array.isArray(record)){
-    return { teams: record.map(migrateTeam), staff: [], vehicles: [] };
-  }
-  return { teams: (record.teams||[]).map(migrateTeam), staff: record.staff||[], vehicles: record.vehicles||[] };
+  return normalizeRecord(record);
 }
 
 let everLoadedOk = false;
 async function loadTeams(){
-  if(!jsonbinConfigured()){
+  if(!backendConfigured()){
     console.warn("JSONBin belum disetkan — data team TIDAK akan disimpan/sync. Sila isi JSONBIN_BIN_ID & JSONBIN_API_KEY dalam kod.");
     if(!everLoadedOk){ teams = DEFAULT_TEAMS.map(migrateTeam); staff = []; }
     lastLoadedAt = Date.now();
@@ -1204,7 +1242,12 @@ function mergeVehiclesFromTeams(list){
 
 async function saveAll(){
   mergeVehiclesFromTeams();
-  if(jsonbinConfigured()){
+  if(useSheets()){
+    try{
+      await sheetsSave({ teams, staff, vehicles });
+      everLoadedOk = true;
+    }catch(e){ console.error("saveAll (Sheets) failed", e); }
+  } else if(jsonbinConfigured()){
     try{
       await fetch(JSONBIN_URL, {
         method: "PUT",
@@ -1279,7 +1322,7 @@ function renderStats(){
     c(BUCKET_COLORS.trouble, tr("colTrouble"), bucketCount("trouble")) +
     c(BUCKET_COLORS.done, tr("colDone"), bucketCount("done")) +
     "";
-  const synced = jsonbinConfigured() && everLoadedOk;
+  const synced = backendConfigured() && everLoadedOk;
   document.getElementById("tbSync").innerHTML = `<span class="dot pulse" style="width:8px;height:8px;border-radius:50%;background:${synced?'#22B573':'#EF4444'}"></span>${synced ? tr("syncOk") : tr("syncOff")}`;
   renderFilters();
 }
@@ -2816,7 +2859,8 @@ document.getElementById("searchBox").addEventListener("input", e => { searchText
 applyStaticText();
 setMode(isAdmin);
 loadTeams();
-setInterval(loadTeams, 15000);
+setInterval(() => { if(!document.hidden) loadTeams(); }, 30000);
+document.addEventListener("visibilitychange", () => { if(!document.hidden) loadTeams(); });
 
 (function(){
   if(GOOGLE_MAPS_API_KEY === "YOUR_GOOGLE_MAPS_API_KEY_HERE"){
