@@ -245,6 +245,15 @@
   .reg-table td{ padding:8px; border-bottom:1px solid var(--line); vertical-align:top; }
   .reg-table tr:hover td{ background:var(--panel-2); }
   .reg-table .reg-name{ font-weight:600; }
+  .mil-presets{ display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 10px; }
+  .mil-presets .d-btn{ width:auto; padding:6px 12px; font-size:12px; }
+  .mil-row2{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:12px; }
+  .mil-row2 input, .mil-row2 select{ width:auto; padding:7px 9px; font-size:12.5px; }
+  .mil-sec{ margin:14px 0; overflow-x:auto; }
+  .mil-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; font-size:13px; }
+  .mil-row{ cursor:pointer; }
+  .mil-ft{ font-size:11.5px; max-width:260px; }
+  .mil-total td{ font-weight:700; background:var(--panel-2); }
   .reg-table .reg-empty{ color:var(--muted); font-style:italic; }
   .reg-edit-btn{ background:#fff; border:1px solid var(--line); color:var(--text); border-radius:5px; padding:4px 9px; font-size:11px; cursor:pointer; }
   .reg-stage-pill{ display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; }
@@ -333,6 +342,7 @@
       <button class="admin-tab" id="tabRegistryBtn">📋 <span id="tabRegistryLabel">Senarai Team</span></button>
       <button class="admin-tab" id="tabStaffBtn">👤 <span id="tabStaffLabel">Staff</span></button>
       <button class="admin-tab" id="tabKpiBtn">📊 <span id="tabKpiLabel">KPI</span></button>
+      <button class="admin-tab" id="tabMileageBtn">🚗 <span id="tabMileageLabel">Mileage</span></button>
       <a class="admin-tab" id="coachingLinkBtn" href="coaching.html" target="_blank" rel="noopener" style="text-decoration:none; margin-left:auto;">📝 <span id="coachingLinkLabel">Coaching KPI</span> ↗</a>
     </div>
 
@@ -390,6 +400,15 @@
       <div id="kpiTable"></div>
       <div class="modal-foot" style="justify-content:flex-end;">
         <button class="btn ghost" id="closeKpiBtn">Tutup</button>
+      </div>
+    </div>
+
+    <div id="mileageView" style="display:none;">
+      <h3 id="milTitle">Mileage Kenderaan</h3>
+      <div id="milControls"></div>
+      <div id="milBody"></div>
+      <div class="modal-foot" style="justify-content:flex-end;">
+        <button class="btn ghost" id="closeMileageBtn">Tutup</button>
       </div>
     </div>
   </div>
@@ -2875,5 +2894,293 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) loadT
   document.head.appendChild(s);
 })();
 </script>
+<script>
+// ===================================================================
+// MILEAGE (Admin → 🚗 Mileage): km per vehicle per day, trips split by
+// stops (stationary ≥ 5 min) and trips split by work checkpoints
+// (Check-Out/Bergerak → next checkpoint). GPS history comes from Flespi;
+// tracks are cleaned with the same drift filter as Laluan (cleanTrack).
+// ===================================================================
+Object.assign(I18N.ms, {
+  tabMileage: "Mileage", milTitle: "Mileage Kenderaan",
+  milToday: "Hari ini", milYesterday: "Semalam", mil7: "7 hari lepas", milThisMonth: "Bulan ini", milLastMonth: "Bulan lepas", milCustom: "Pilih tarikh",
+  milVehicle: "Kenderaan", milAll: "Semua kenderaan", milRun: "Kira mileage", milLoading: "Memuat data GPS…", milDone: "Siap",
+  milDaily: "Mileage harian", milTripsStop: "Trip ikut berhenti (≥ 5 minit)", milTripsCp: "Trip ikut checkpoint kerja",
+  milDate: "Tarikh", milTeam: "Team", milKm: "Jarak (km)", milMoving: "Masa bergerak", milTrips: "Bil. trip", milMaxSpd: "Laju maks",
+  milStart: "Mula", milEnd: "Tamat", milFromTo: "Dari → Ke", milDur: "Tempoh", milTotal: "Jumlah", milCsv: "Muat turun CSV",
+  milNoGps: "Tiada kenderaan dengan GPS tracker.", milNoData: "Tiada pergerakan dalam julat ini.", milErr: "Gagal muat data GPS untuk",
+  milRowHint: "Klik baris trip untuk lihat laluannya di peta.", milCpNote: "Nota: sejarah checkpoint menyimpan 20 status terakhir setiap team, jadi trip checkpoint lama mungkin tiada di sini.",
+  milFromCp: "Dari", milToCp: "Ke", milTooLong: "Julat maksimum 62 hari.", milClose: "Tutup",
+});
+Object.assign(I18N.en, {
+  tabMileage: "Mileage", milTitle: "Vehicle Mileage",
+  milToday: "Today", milYesterday: "Yesterday", mil7: "Last 7 days", milThisMonth: "This month", milLastMonth: "Last month", milCustom: "Pick dates",
+  milVehicle: "Vehicle", milAll: "All vehicles", milRun: "Calculate mileage", milLoading: "Loading GPS data…", milDone: "Done",
+  milDaily: "Daily mileage", milTripsStop: "Trips by stops (≥ 5 min)", milTripsCp: "Trips by work checkpoints",
+  milDate: "Date", milTeam: "Team", milKm: "Distance (km)", milMoving: "Moving time", milTrips: "Trips", milMaxSpd: "Top speed",
+  milStart: "Start", milEnd: "End", milFromTo: "From → To", milDur: "Duration", milTotal: "Total", milCsv: "Download CSV",
+  milNoGps: "No vehicles with a GPS tracker.", milNoData: "No movement in this range.", milErr: "Could not load GPS data for",
+  milRowHint: "Click a trip row to see its route on the map.", milCpNote: "Note: checkpoint history keeps each team's last 20 statuses, so older checkpoint trips may be missing here.",
+  milFromCp: "From", milToCp: "To", milTooLong: "Maximum range is 62 days.", milClose: "Close",
+});
+
+const MIL_STOP_SEC = 300;     // stationary this long splits a trip
+const MIL_MIN_TRIP_KM = 0.3;  // ignore tiny "trips" (car moved across the car park)
+const milCache = {};          // "deviceId|yyyy-mm-dd" -> cleaned points [{lat,lng,t,v}]
+let milPreset = "today", milFrom = "", milTo = "", milVeh = "all", milResult = null, milBusy = false;
+
+function milEsc(v){ return String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function milYmd(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function milDayStart(ymd){ const [y,m,d] = ymd.split("-").map(Number); return new Date(y, m-1, d, 0, 0, 0, 0); }
+function milFmtDay(ymd){ return milDayStart(ymd).toLocaleDateString(tr("locale"), { weekday:"short", day:"2-digit", month:"short" }); }
+function milHm(ts){ return new Date(ts*1000).toLocaleTimeString(tr("locale"), { hour:"2-digit", minute:"2-digit", hour12:false }); }
+function milDur(sec){ sec = Math.round(sec); const h = Math.floor(sec/3600), m = Math.round((sec%3600)/60); return h ? `${h}j ${m}m` : `${m}m`; }
+
+function milRange(){
+  const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let a, b;
+  if(milPreset === "yesterday"){ a = new Date(today); a.setDate(a.getDate()-1); b = a; }
+  else if(milPreset === "7"){ a = new Date(today); a.setDate(a.getDate()-6); b = today; }
+  else if(milPreset === "thisMonth"){ a = new Date(today.getFullYear(), today.getMonth(), 1); b = today; }
+  else if(milPreset === "lastMonth"){ a = new Date(today.getFullYear(), today.getMonth()-1, 1); b = new Date(today.getFullYear(), today.getMonth(), 0); }
+  else if(milPreset === "custom" && milFrom && milTo){ a = milDayStart(milFrom); b = milDayStart(milTo); if(b < a){ const x = a; a = b; b = x; } }
+  else { a = today; b = today; }
+  const days = [];
+  for(let d = new Date(a); d <= b; d.setDate(d.getDate()+1)) days.push(milYmd(d));
+  return days;
+}
+
+// every GPS vehicle we know: current teams + the saved-vehicle registry
+function milVehicles(){
+  const map = {};
+  (typeof vehicles !== "undefined" ? vehicles : []).forEach(v => { if(v.gpsDeviceId) map[String(v.gpsDeviceId)] = { id: String(v.gpsDeviceId), plate: v.plate || "", model: v.model || "", team: null }; });
+  teams.forEach(t => { if(!t.gpsDeviceId) return; const id = String(t.gpsDeviceId);
+    map[id] = Object.assign(map[id] || { id, plate: "", model: "" }, { plate: t.vehiclePlate || (map[id] && map[id].plate) || "", model: t.vehicleModel || (map[id] && map[id].model) || "", team: t }); });
+  return Object.values(map).sort((x, y) => String(x.plate || x.id).localeCompare(String(y.plate || y.id)));
+}
+function milVehLabel(v){ return v.plate || ("GPS " + v.id); }
+
+async function milLoadDay(id, ymd){
+  const key = id + "|" + ymd;
+  const start = milDayStart(ymd), end = new Date(start); end.setDate(end.getDate()+1);
+  const isPast = end.getTime() < Date.now() - 10*60*1000;
+  if(isPast && milCache[key]) return milCache[key];
+  const q = { from: Math.floor(start.getTime()/1000), to: Math.min(Math.floor(end.getTime()/1000) - 1, Math.floor(Date.now()/1000)),
+              fields: "timestamp,position.latitude,position.longitude,position.speed,position.valid" };
+  if(q.to <= q.from) return [];
+  const url = `https://flespi.io/gw/devices/${encodeURIComponent(id)}/messages?data=${encodeURIComponent(JSON.stringify(q))}`;
+  const res = await fetch(url, { headers: { "Authorization": `FlespiToken ${FLESPI_TOKEN}` }, cache: "no-store" });
+  if(!res.ok) throw new Error("HTTP " + res.status);
+  const data = await res.json();
+  const raw = (data.result || [])
+    .filter(m => typeof m["position.latitude"] === "number" && typeof m["position.longitude"] === "number" && m["position.valid"] !== false)
+    .map(m => ({ lat: m["position.latitude"], lng: m["position.longitude"], t: m.timestamp, v: Number(m["position.speed"]) || 0 }))
+    .sort((a, b) => a.t - b.t);
+  const pts = cleanTrack(raw);
+  pts._maxV = raw.reduce((mx, p) => Math.max(mx, p.v), 0);
+  if(isPast) milCache[key] = pts;
+  return pts;
+}
+
+// km along a cleaned track between two timestamps
+function milKmBetween(pts, t0, t1){
+  let km = 0;
+  for(let i = 1; i < pts.length; i++){
+    if(pts[i].t <= t0 || pts[i-1].t >= t1) continue;
+    if(pts[i].t - pts[i-1].t >= MIL_STOP_SEC) continue; // stationary gap
+    km += haversineKm(pts[i-1], pts[i]);
+  }
+  return km;
+}
+function milTripsFromPts(pts){
+  const trips = [];
+  let cur = null;
+  for(let i = 1; i < pts.length; i++){
+    const a = pts[i-1], b = pts[i];
+    if(b.t - a.t >= MIL_STOP_SEC){ if(cur){ trips.push(cur); cur = null; } continue; }
+    if(!cur) cur = { start: a, end: b, km: 0, maxV: 0 };
+    cur.km += haversineKm(a, b); cur.end = b; cur.maxV = Math.max(cur.maxV, a.v, b.v);
+  }
+  if(cur) trips.push(cur);
+  return trips.filter(t => t.km >= MIL_MIN_TRIP_KM);
+}
+// name a point after a known site (team site within 250 m), else short coordinates
+function milPlace(p){
+  for(const t of teams){
+    if(typeof t.lat === "number" && typeof t.lng === "number" && t.site && haversineKm(p, { lat: t.lat, lng: t.lng }) <= 0.25) return t.site;
+  }
+  return `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`;
+}
+
+async function milRun(){
+  if(milBusy) return;
+  const days = milRange();
+  const msg = document.getElementById("milStatus");
+  if(days.length > 62){ msg.textContent = tr("milTooLong"); return; }
+  let vehs = milVehicles();
+  if(!vehs.length){ msg.textContent = tr("milNoGps"); return; }
+  if(milVeh !== "all") vehs = vehs.filter(v => v.id === milVeh);
+  milBusy = true; document.getElementById("milRunBtn").disabled = true;
+  const jobs = []; vehs.forEach(v => days.forEach(d => jobs.push({ v, d })));
+  const out = { daily: [], stopTrips: [], cpTrips: [], errors: [], days, vehs };
+  const tracks = {}; // id -> {ymd: pts}
+  let done = 0;
+  const worker = async () => {
+    while(jobs.length){
+      const { v, d } = jobs.shift();
+      try{ (tracks[v.id] = tracks[v.id] || {})[d] = await milLoadDay(v.id, d); }
+      catch(e){ out.errors.push(`${milVehLabel(v)} ${d}`); (tracks[v.id] = tracks[v.id] || {})[d] = []; }
+      done++; msg.textContent = `${tr("milLoading")} ${done}/${done + jobs.length}`;
+    }
+  };
+  await Promise.all([worker(), worker()]); // two at a time — gentle on Flespi
+
+  vehs.forEach(v => days.forEach(d => {
+    const pts = (tracks[v.id] || {})[d] || [];
+    const trips = milTripsFromPts(pts);
+    const km = trips.reduce((s, t) => s + t.km, 0);
+    const moving = trips.reduce((s, t) => s + (t.end.t - t.start.t), 0);
+    out.daily.push({ d, v, km, moving, trips: trips.length, maxV: pts._maxV || 0 });
+    trips.forEach(t => out.stopTrips.push({ d, v, ...t }));
+  }));
+
+  // checkpoint trips: from each Check-Out/Bergerak (transit) to the team's next checkpoint
+  const first = milDayStart(days[0]).getTime(), last = milDayStart(days[days.length-1]).getTime() + 86400000;
+  vehs.forEach(v => {
+    const t = v.team; if(!t) return;
+    const hist = (t.history || []).slice().sort((a, b) => a.at - b.at);
+    for(let i = 0; i < hist.length; i++){
+      const h = hist[i]; if(h.stage !== "transit" || h.at < first || h.at >= last) continue;
+      const nx = hist[i+1]; const endAt = nx ? nx.at : Date.now();
+      const prev = hist[i-1];
+      const t0 = h.at/1000, t1 = endAt/1000;
+      let km = 0;
+      Object.values(tracks[v.id] || {}).forEach(pts => { km += milKmBetween(pts, t0, t1); });
+      out.cpTrips.push({ v, team: t, start: h.at, end: endAt, km, ongoing: !nx,
+        from: prev ? `${stageLabel(prev.stage)}${prev.site ? " · " + prev.site : ""}` : "—",
+        to: nx ? `${stageLabel(nx.stage)}${nx.site ? " · " + nx.site : ""}` : tr("vsMoving") + "…",
+        auto: !!h.auto || !!(nx && nx.auto) });
+    }
+  });
+  out.stopTrips.sort((a, b) => a.start.t - b.start.t);
+  out.cpTrips.sort((a, b) => a.start - b.start);
+  milResult = out;
+  milBusy = false; document.getElementById("milRunBtn").disabled = false;
+  msg.textContent = out.errors.length ? `${tr("milErr")} ${out.errors.join(", ")}` : tr("milDone");
+  milRender();
+}
+
+function milCsv(name, header, rows){
+  const q = v => { const s = String(v == null ? "" : v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const text = "﻿" + [header, ...rows].map(r => r.map(q).join(",")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
+  a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+function milShowOnMap(team, t0, t1){
+  if(!team) return;
+  overlay.classList.remove("open");
+  if(typeof setMode === "function" && !isAdmin) setMode(true);
+  selectTeam(team.id);
+  if(typeof clearDirections === "function"){ clearDirections(); dirOpen = false; }
+  routeOpen = true; routePreset = "";
+  routeFrom = toLocalInput(new Date(t0*1000 - 60000)); routeTo = toLocalInput(new Date(t1*1000 + 60000));
+  renderTele(); loadRoute(team);
+}
+
+function milRender(){
+  const box = document.getElementById("milBody");
+  const r = milResult;
+  if(!r){ box.innerHTML = ""; return; }
+  const km = x => x.toFixed(1);
+  // daily
+  const dailyRows = r.daily.filter(x => x.km > 0 || r.days.length === 1);
+  const totKm = r.daily.reduce((s, x) => s + x.km, 0), totMv = r.daily.reduce((s, x) => s + x.moving, 0), totTr = r.daily.reduce((s, x) => s + x.trips, 0);
+  const teamOf = v => v.team ? v.team.name : "—";
+  let h = `<div class="mil-sec"><div class="mil-head"><b>${tr("milDaily")}</b><button class="btn ghost small" id="milCsvDaily">⬇ ${tr("milCsv")}</button></div>`;
+  h += dailyRows.length ? `<table class="reg-table"><thead><tr><th>${tr("milDate")}</th><th>${tr("milVehicle")}</th><th>${tr("milTeam")}</th><th style="text-align:right">${tr("milKm")}</th><th>${tr("milMoving")}</th><th style="text-align:right">${tr("milTrips")}</th><th style="text-align:right">${tr("milMaxSpd")}</th></tr></thead><tbody>${
+    dailyRows.map(x => `<tr><td>${milFmtDay(x.d)}</td><td class="reg-name">${milEsc(milVehLabel(x.v))}</td><td>${milEsc(teamOf(x.v))}</td><td style="text-align:right"><b>${km(x.km)}</b></td><td>${milDur(x.moving)}</td><td style="text-align:right">${x.trips}</td><td style="text-align:right">${Math.round(x.maxV)} km/h</td></tr>`).join("")
+  }<tr class="mil-total"><td colspan="3">${tr("milTotal")}</td><td style="text-align:right">${km(totKm)}</td><td>${milDur(totMv)}</td><td style="text-align:right">${totTr}</td><td></td></tr></tbody></table>` : `<div class="small-muted">${tr("milNoData")}</div>`;
+  h += `</div>`;
+  // stop trips
+  h += `<div class="mil-sec"><div class="mil-head"><b>${tr("milTripsStop")} (${r.stopTrips.length})</b><button class="btn ghost small" id="milCsvStop">⬇ ${tr("milCsv")}</button></div>`;
+  h += r.stopTrips.length ? `<table class="reg-table"><thead><tr><th>#</th><th>${tr("milDate")}</th><th>${tr("milVehicle")}</th><th>${tr("milStart")}</th><th>${tr("milEnd")}</th><th>${tr("milFromTo")}</th><th style="text-align:right">${tr("milKm")}</th><th>${tr("milDur")}</th></tr></thead><tbody>${
+    r.stopTrips.map((x, i) => `<tr class="mil-row" data-stop="${i}"><td>${i+1}</td><td>${milFmtDay(x.d)}</td><td class="reg-name">${milEsc(milVehLabel(x.v))}</td><td>${milHm(x.start.t)}</td><td>${milHm(x.end.t)}</td><td class="mil-ft">${milEsc(milPlace(x.start))} → ${milEsc(milPlace(x.end))}</td><td style="text-align:right"><b>${km(x.km)}</b></td><td>${milDur(x.end.t - x.start.t)}</td></tr>`).join("")
+  }</tbody></table><div class="small-muted">${tr("milRowHint")}</div>` : `<div class="small-muted">${tr("milNoData")}</div>`;
+  h += `</div>`;
+  // checkpoint trips
+  h += `<div class="mil-sec"><div class="mil-head"><b>${tr("milTripsCp")} (${r.cpTrips.length})</b><button class="btn ghost small" id="milCsvCp">⬇ ${tr("milCsv")}</button></div>`;
+  h += r.cpTrips.length ? `<table class="reg-table"><thead><tr><th>#</th><th>${tr("milTeam")}</th><th>${tr("milStart")}</th><th>${tr("milEnd")}</th><th>${tr("milFromCp")}</th><th>${tr("milToCp")}</th><th style="text-align:right">${tr("milKm")}</th><th>${tr("milDur")}</th></tr></thead><tbody>${
+    r.cpTrips.map((x, i) => `<tr class="mil-row" data-cp="${i}"><td>${i+1}</td><td class="reg-name">${milEsc(x.team.name)}<br><span class="small-muted" style="margin:0">${milEsc(milVehLabel(x.v))}</span></td><td>${milFmtDay(milYmd(new Date(x.start)))} ${milHm(x.start/1000)}</td><td>${x.ongoing ? "…" : milHm(x.end/1000)}</td><td class="mil-ft">${milEsc(x.from)}</td><td class="mil-ft">${milEsc(x.to)}${x.auto ? ' <span class="auto-tag">auto GPS</span>' : ""}</td><td style="text-align:right"><b>${km(x.km)}</b></td><td>${milDur((x.end - x.start)/1000)}</td></tr>`).join("")
+  }</tbody></table>` : `<div class="small-muted">${tr("milNoData")}</div>`;
+  h += `<div class="small-muted">${tr("milCpNote")}</div></div>`;
+  box.innerHTML = h;
+
+  document.getElementById("milCsvDaily").onclick = () => milCsv(`mileage-harian-${r.days[0]}_${r.days[r.days.length-1]}.csv`,
+    [tr("milDate"), tr("milVehicle"), tr("milTeam"), tr("milKm"), tr("milMoving"), tr("milTrips"), tr("milMaxSpd")],
+    r.daily.map(x => [x.d, milVehLabel(x.v), teamOf(x.v), km(x.km), milDur(x.moving), x.trips, Math.round(x.maxV)]));
+  document.getElementById("milCsvStop").onclick = () => milCsv(`mileage-trip-berhenti-${r.days[0]}_${r.days[r.days.length-1]}.csv`,
+    ["#", tr("milDate"), tr("milVehicle"), tr("milStart"), tr("milEnd"), tr("milFromTo"), tr("milKm"), tr("milDur")],
+    r.stopTrips.map((x, i) => [i+1, x.d, milVehLabel(x.v), milHm(x.start.t), milHm(x.end.t), `${milPlace(x.start)} -> ${milPlace(x.end)}`, km(x.km), milDur(x.end.t - x.start.t)]));
+  document.getElementById("milCsvCp").onclick = () => milCsv(`mileage-trip-checkpoint-${r.days[0]}_${r.days[r.days.length-1]}.csv`,
+    ["#", tr("milTeam"), tr("milVehicle"), tr("milStart"), tr("milEnd"), tr("milFromCp"), tr("milToCp"), tr("milKm"), tr("milDur"), "Auto GPS"],
+    r.cpTrips.map((x, i) => [i+1, x.team.name, milVehLabel(x.v), new Date(x.start).toLocaleString(tr("locale"), { hour12:false }), x.ongoing ? "" : new Date(x.end).toLocaleString(tr("locale"), { hour12:false }), x.from, x.to, km(x.km), milDur((x.end - x.start)/1000), x.auto ? "ya" : ""]));
+  box.querySelectorAll("[data-stop]").forEach(row => { row.onclick = () => { const x = r.stopTrips[+row.dataset.stop]; milShowOnMap(x.v.team, x.start.t, x.end.t); }; });
+  box.querySelectorAll("[data-cp]").forEach(row => { row.onclick = () => { const x = r.cpTrips[+row.dataset.cp]; milShowOnMap(x.team, x.start/1000, x.end/1000); }; });
+}
+
+function milRenderControls(){
+  document.getElementById("milTitle").textContent = tr("milTitle");
+  document.getElementById("tabMileageLabel").textContent = tr("tabMileage");
+  document.getElementById("closeMileageBtn").textContent = tr("milClose");
+  const presets = [["today","milToday"],["yesterday","milYesterday"],["7","mil7"],["thisMonth","milThisMonth"],["lastMonth","milLastMonth"],["custom","milCustom"]];
+  const vehs = milVehicles();
+  document.getElementById("milControls").innerHTML = `
+    <div class="mil-presets">${presets.map(([k, l]) => `<button class="d-btn ${milPreset===k?'on':''}" data-milp="${k}">${tr(l)}</button>`).join("")}</div>
+    <div class="mil-row2">
+      ${milPreset === "custom" ? `<input type="date" id="milFrom" value="${milFrom}"> – <input type="date" id="milTo" value="${milTo}">` : ""}
+      <select id="milVeh"><option value="all">${tr("milAll")}</option>${vehs.map(v => `<option value="${milEsc(v.id)}" ${milVeh===v.id?"selected":""}>${milEsc(milVehLabel(v))}${v.team ? " · " + milEsc(v.team.name) : ""}</option>`).join("")}</select>
+      <button class="btn" id="milRunBtn" ${milBusy?"disabled":""}>${tr("milRun")}</button>
+      <span class="small-muted" id="milStatus" style="margin:0"></span>
+    </div>`;
+  document.querySelectorAll("[data-milp]").forEach(b => { b.onclick = () => {
+    milPreset = b.dataset.milp;
+    if(milPreset === "custom" && !milFrom){ const t = new Date(); milTo = milYmd(t); t.setDate(t.getDate()-6); milFrom = milYmd(t); }
+    milRenderControls(); if(milPreset !== "custom") milRun();
+  }; });
+  const f = document.getElementById("milFrom"), t = document.getElementById("milTo");
+  if(f) f.onchange = () => { milFrom = f.value; };
+  if(t) t.onchange = () => { milTo = t.value; };
+  document.getElementById("milVeh").onchange = e => { milVeh = e.target.value; };
+  document.getElementById("milRunBtn").onclick = () => milRun();
+}
+
+// ---- wire into the admin modal ----
+(function(){
+  const _show = showAdminTab;
+  showAdminTab = function(which){
+    _show(which === "mileage" ? "edit" : which);
+    const on = which === "mileage";
+    const modal = document.getElementById("mileageView").closest(".modal");
+    if(modal) modal.style.width = on ? "min(1100px,96vw)" : "min(760px,94vw)";
+    document.getElementById("mileageView").style.display = on ? "" : "none";
+    document.getElementById("tabMileageBtn").classList.toggle("active", on);
+    if(on){
+      ["editView","registryView","staffView","kpiView"].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = "none"; });
+      document.getElementById("tabEditBtn").classList.remove("active");
+      milRenderControls(); milRender();
+      if(!milResult) milRun();
+    }
+  };
+  document.getElementById("tabMileageBtn").onclick = () => showAdminTab("mileage");
+  document.getElementById("closeMileageBtn").onclick = () => overlay.classList.remove("open");
+  const relabel = () => { document.getElementById("tabMileageLabel").textContent = tr("tabMileage"); if(document.getElementById("mileageView").style.display !== "none"){ milRenderControls(); milRender(); } };
+  ["langMsBtn","langEnBtn"].forEach(id => document.getElementById(id).addEventListener("click", () => setTimeout(relabel, 0)));
+  relabel();
+})();
+</script>
+
 </body>
 </html>
