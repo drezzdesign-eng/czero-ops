@@ -125,6 +125,17 @@
   /* ---------- map ---------- */
   .mapcol{ flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
   .mapwrap{ position:relative; flex:1; min-height:0; }
+  .mapcol:fullscreen{ width:100vw; height:100vh; background:#fff; }
+  .mapcol:-webkit-full-screen{ width:100vw; height:100vh; background:#fff; }
+  .mapcol:fullscreen .mapwrap, .mapcol:-webkit-full-screen .mapwrap{ height:auto; flex:1; }
+  .fs-wrap{ position:relative; flex:none; }
+  .fs-exit{ display:none; position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:5; height:34px; padding:0 14px; border:0; border-radius:999px; background:rgba(15,23,42,.82); color:#fff; font-size:12.5px; font-weight:600; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.25); }
+  .fs-exit:hover{ background:#0F172A; }
+  .mapcol:fullscreen .fs-exit, .mapcol:-webkit-full-screen .fs-exit{ display:block; }
+  .fs-menu{ position:absolute; top:44px; right:0; z-index:3000; background:#fff; border:1px solid var(--line); border-radius:8px; box-shadow:0 10px 28px rgba(15,23,42,.22); padding:5px; min-width:190px; display:none; }
+  .fs-menu.open{ display:block; }
+  .fs-menu button{ width:100%; display:flex; align-items:center; gap:9px; padding:9px 11px; border:0; background:none; border-radius:6px; font-size:13px; font-weight:600; color:var(--text); cursor:pointer; text-align:left; white-space:nowrap; }
+  .fs-menu button:hover{ background:var(--panel-2); }
   #map{ position:absolute !important; inset:0; width:100%; height:100%; background:#E5E3DF; }
   .map-tools{ position:absolute; left:10px; top:10px; z-index:2; display:flex; gap:8px; align-items:center; }
   .map-tools.in-gmap{ position:static; margin:10px; }
@@ -295,9 +306,15 @@
       </div>
       <button class="hbtn checkin" id="checkinBtn"><span id="checkinBtnLabel">✔ Check-in</span></button>
       <button class="hbtn mode" id="modeBtn"><span id="modeIco"></span><span id="modeLbl">Staff</span></button>
-      <button class="hbtn gear" id="fsBtn" title="Skrin penuh" aria-label="Skrin penuh">
+      <div class="fs-wrap">
+      <button class="hbtn gear" id="fsBtn" title="Skrin penuh" aria-label="Skrin penuh" aria-haspopup="true">
         <svg id="fsIco" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
       </button>
+        <div class="fs-menu" id="fsMenu" role="menu">
+          <button id="fsPageBtn" role="menuitem"><span>🖥️</span><span id="fsPageLbl">Seluruh page</span></button>
+          <button id="fsMapBtn" role="menuitem"><span>🗺️</span><span id="fsMapLbl">Peta sahaja</span></button>
+        </div>
+      </div>
       <button class="hbtn gear" id="gearBtn" title="Settings" aria-label="Settings">
         <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
       </button>
@@ -320,6 +337,7 @@
     <section class="mapcol">
       <div class="mapwrap">
         <div id="map"></div>
+        <button class="fs-exit" id="fsExitBtn">✕ <span id="fsExitLbl">Keluar skrin penuh</span></button>
         <div class="map-tools">
           <div class="map-refresh" id="updated-ago">-</div>
           <button class="map-btn" id="trafficBtn" aria-pressed="false">
@@ -782,7 +800,7 @@ function initMap(){
     mapTypeControl: true,
     mapTypeControlOptions: { position: google.maps.ControlPosition.TOP_RIGHT },
     streetViewControl: true,
-    fullscreenControl: true,
+    fullscreenControl: false, // replaced by the top-bar full-screen button (page / map)
     zoomControl: true,
   });
   infoWindow = new google.maps.InfoWindow();
@@ -3186,24 +3204,39 @@ function milRenderControls(){
 </script>
 
 <script>
-// Full-screen toggle (top bar). Hidden where the browser can't do it (e.g. iPhone Safari).
+// Full-screen (top bar): choose whole page or map only (map + route/playback bar).
+// Hidden where the browser can't do it (e.g. iPhone Safari).
 (function(){
-  const btn = document.getElementById("fsBtn"), ico = document.getElementById("fsIco"), el = document.documentElement;
-  const req = el.requestFullscreen || el.webkitRequestFullscreen;
-  if(!req){ btn.style.display = "none"; return; }
+  const btn = document.getElementById("fsBtn"), ico = document.getElementById("fsIco"), menu = document.getElementById("fsMenu");
+  const de = document.documentElement;
+  if(!(de.requestFullscreen || de.webkitRequestFullscreen)){ btn.parentNode.style.display = "none"; return; }
   const cur = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const go = el => { const f = el.requestFullscreen || el.webkitRequestFullscreen; const r = f.call(el); if(r && r.catch) r.catch(() => {}); };
+  const exit = () => (document.exitFullscreen || document.webkitExitFullscreen).call(document);
   const IN = '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>';
   const OUT = '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>';
+  const ms = () => (typeof LANG === "undefined" || LANG === "ms");
   const paint = () => {
-    const on = !!cur(), ms = (typeof LANG === "undefined" || LANG === "ms");
+    const on = !!cur();
     ico.innerHTML = on ? OUT : IN;
-    btn.title = on ? (ms ? "Keluar skrin penuh (Esc)" : "Exit full screen (Esc)") : (ms ? "Skrin penuh" : "Full screen");
+    btn.title = on ? (ms() ? "Keluar skrin penuh (Esc)" : "Exit full screen (Esc)") : (ms() ? "Skrin penuh" : "Full screen");
     btn.setAttribute("aria-label", btn.title);
+    document.getElementById("fsPageLbl").textContent = ms() ? "Seluruh page" : "Whole page";
+    document.getElementById("fsMapLbl").textContent = ms() ? "Peta sahaja" : "Map only";
+    document.getElementById("fsExitLbl").textContent = ms() ? "Keluar skrin penuh" : "Exit full screen";
+    // map size changes: let Google Maps redraw
+    setTimeout(() => { try{ if(typeof gmap !== "undefined" && gmap && window.google && google.maps.event) google.maps.event.trigger(gmap, "resize"); }catch(e){} }, 300);
   };
-  btn.onclick = () => {
-    if(cur()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-    else { const r = req.call(el); if(r && r.catch) r.catch(() => {}); }
+  btn.onclick = ev => {
+    ev.stopPropagation();
+    if(cur()){ menu.classList.remove("open"); exit(); return; }
+    menu.classList.toggle("open");
   };
+  document.getElementById("fsExitBtn").onclick = () => { if(cur()) exit(); };
+  document.getElementById("fsPageBtn").onclick = () => { menu.classList.remove("open"); go(de); };
+  document.getElementById("fsMapBtn").onclick = () => { menu.classList.remove("open"); go(document.querySelector(".mapcol")); };
+  document.addEventListener("click", ev => { if(!menu.contains(ev.target)) menu.classList.remove("open"); });
+  document.addEventListener("keydown", ev => { if(ev.key === "Escape") menu.classList.remove("open"); });
   document.addEventListener("fullscreenchange", paint);
   document.addEventListener("webkitfullscreenchange", paint);
   ["langMsBtn","langEnBtn"].forEach(id => document.getElementById(id).addEventListener("click", () => setTimeout(paint, 0)));
